@@ -51,6 +51,9 @@ From 1 Enoch: Lesser Fallen, Grigori Watchers, Fallen Ophanim and Nephilim. Ever
 ## Tech notes
 
 - Single-file prototype: `index.html` holds all HTML, CSS and JavaScript.
-- three.js r147 with UnrealBloom post-processing, loaded from jsDelivr.
+- three.js r147, loaded from jsDelivr. HDR pipeline: half-float MSAA render target → UnrealBloom → custom grade pass (ACES filmic, split toning, chromatic aberration, vignette, grain).
+- Soft PCF shadows from a key light that follows the camera, image-based lighting from a generated sky (heavenly disk overhead, ember ring below), and a wet-flagstone floor with procedural normal and roughness maps.
+- Atmosphere: shader light shafts, drifting motes, two layers of fbm ground mist and a hellglow in the abyss.
+- Feedback: floating damage numbers, enemy health bars, hit punch, hit-stop, shockwaves and scorch marks.
 - Bullets, particles and pickups are drawn with instanced meshes and pooled objects, so thousands of bullets stay smooth.
 - Sound effects are synthesized with the Web Audio API; there are no asset files.
