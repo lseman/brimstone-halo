@@ -4,7 +4,9 @@ A modern isometric, Diablo-like bullet hell / bullet heaven built with [three.js
 
 You play one of the heavenly choirs descending into the pit to fight the fallen Watchers. Grazing enemy bullets fills a **Grace** globe; when it is full you **Ascend** and the hellfire around you turns to light. Relics, souls, choir skills and companions are kept from one descent to the next.
 
-**Play:** serve the folder with any static server (for example `npx serve .` or GitHub Pages) and open `index.html`. three.js loads from a CDN; there is no build step.
+**Play:** https://lseman.github.io/brimstone-halo/
+
+Every push to `main` republishes the site through `.github/workflows/pages.yml`, which copies it to the `gh-pages` branch that GitHub Pages serves. To run it locally, serve the folder with any static server (for example `npx serve .`) and open `index.html`; three.js loads from a CDN and there is no build step.
 
 ## Controls
 
