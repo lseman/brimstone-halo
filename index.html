@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brimstone Halo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@400;600&family=Alegreya+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: full-bleed isometric WebGL stage; HUD pinned like a Diablo belt (life globe left, grace globe right, skills between);
+   the sanctuary hub leaves the hero visible on the left and stacks the reliquary on the right */
+:root{
+  --void:#08060a; --stone:#1b1517; --bronze:#8a6a43; --bone:#efe6d6; --ash:#9c9088;
+  --ember:#ff5a2e; --halo:#ffd27a; --blood:#b3122a; --sigil:#a084ff; --soul:#9fe8ff;
+  --common:#d9d2c6; --magic:#86a8ff; --rare:#ffe066; --legend:#ff9a3d;
+  --up:#7ddc8a; --down:#ff6b6b;
+  --f-display:'Grenze Gotisch','Times New Roman',serif;
+  --f-body:'Alegreya Sans SC','Gill Sans','Trebuchet MS',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--void);color:var(--bone);overflow:hidden;font-family:var(--f-body);-webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23ffd27a' stroke-width='1.5'/%3E%3Cpath d='M16 2v8M16 22v8M2 16h8M22 16h8' stroke='%23ffd27a' stroke-width='1.5'/%3E%3Ccircle cx='16' cy='16' r='1.6' fill='%23fff'/%3E%3C/svg%3E") 16 16,crosshair}
+#vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse 75% 70% at 50% 50%,transparent 55%,#000000d0 100%)}
+#ascGlow{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 45%,#ffe9b022,#ffd27a33 60%,#ffcf6a66 100%);mix-blend-mode:screen}
+#hurt{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 40%,#c0102ab0 100%)}
+body.graded #vignette{display:none}
+.r-common{--rc:var(--common)} .r-magic{--rc:var(--magic)} .r-rare{--rc:var(--rare)} .r-legend{--rc:var(--legend)}
+
+#labels,#dmg{position:fixed;inset:0;pointer-events:none;z-index:1;overflow:hidden}
+.dn{position:absolute;left:0;top:0;font-family:var(--f-mono);font-weight:600;font-size:15px;color:#fff;text-shadow:0 1px 2px #000,0 0 8px #000c;font-variant-numeric:tabular-nums;will-change:transform,opacity;white-space:nowrap}
+.dn.crit{color:var(--halo);font-size:22px;text-shadow:0 1px 2px #000,0 0 14px #ff9a3d}
+.dn.heal{color:var(--up)}
+.loot{position:absolute;left:0;top:0;padding:2px 8px;font-size:12px;background:#000000cc;border:1px solid #ffffff1f;color:var(--rc);white-space:nowrap;letter-spacing:.02em;will-change:transform}
+.loot.r-legend{border-color:#ff9a3d88;box-shadow:0 0 10px #ff9a3d55}
+#toasts{position:fixed;left:50%;top:calc(92px + env(safe-area-inset-top,0px));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:3;max-width:calc(100% - 32px)}
+.toast{background:#0b0708e8;border:1px solid #4a3a2c;border-left:3px solid var(--rc,var(--halo));padding:5px 12px;font-size:14px;animation:toast 2.8s ease forwards;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.toast b{color:var(--rc,var(--halo));font-weight:500}
+@keyframes toast{0%{opacity:0;transform:translateY(-6px)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+
+#hud{position:fixed;inset:0;pointer-events:none;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;justify-content:space-between;z-index:2}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.lbl{display:block;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ash)}
+.wave b{font-family:var(--f-display);font-weight:400;font-size:38px;line-height:.95;display:block;text-shadow:0 0 18px #ff5a2e66}
+.wave small,.score small{display:block;font-family:var(--f-mono);font-size:11px;color:var(--ash);margin-top:3px;font-variant-numeric:tabular-nums}
+.score{text-align:right}
+.score b{font-family:var(--f-mono);font-weight:600;font-size:24px;font-variant-numeric:tabular-nums;display:block;color:var(--soul);text-shadow:0 0 12px #6bd6ff55}
+#bossBar{flex:1;max-width:520px;text-align:center;padding-top:4px}
+#bossName{font-family:var(--f-display);font-size:24px;color:#ffb3cc;text-shadow:0 0 14px #ff6aa888;margin-bottom:4px}
+.bar{height:10px;border:1px solid var(--bronze);background:#000b;box-shadow:0 0 0 1px #000}
+.bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#5c0716,#e0405a)}
+#bossPhase{font-family:var(--f-mono);font-size:11px;color:var(--ash);margin-top:4px;letter-spacing:.08em}
+
+.bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.globe{position:relative;flex:none;width:108px;height:108px;border-radius:50%;overflow:hidden;border:3px solid var(--bronze);background:radial-gradient(circle at 50% 60%,#160d0f,#050304);box-shadow:0 0 0 2px #000,0 8px 24px #000c,inset 0 0 18px #000;transition:box-shadow .3s}
+.globe .fill{position:absolute;left:0;right:0;bottom:0;height:100%;overflow:visible}
+.globe .fill::before,.globe .fill::after{content:'';position:absolute;left:50%;top:0;width:220%;aspect-ratio:1;border-radius:43%;background:#120a0c;transform:translate(-50%,-99%) rotate(0deg);animation:slosh 7s linear infinite}
+.globe .fill::after{border-radius:40%;background:#120a0c99;animation-duration:11s;animation-direction:reverse;transform:translate(-50%,-97%) rotate(0deg)}
+@keyframes slosh{to{transform:translate(-50%,-98%) rotate(360deg)}}
+.hp .fill{background:radial-gradient(circle at 40% 30%,#ff5464,#a0071d 55%,#3d020d)}
+.grace .fill{background:radial-gradient(circle at 40% 30%,#fff6d0,#e8a93a 55%,#5e3606)}
+.glass{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 24%,#ffffff60,transparent 30%),radial-gradient(circle at 50% 50%,transparent 55%,#0009 100%)}
+.globe span{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-mono);font-weight:600;font-size:15px;text-shadow:0 1px 3px #000,0 0 8px #000;font-variant-numeric:tabular-nums}
+.globe em{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-style:normal;font-size:10px;letter-spacing:.2em;color:#fff9;text-shadow:0 1px 2px #000}
+.globe.ready{box-shadow:0 0 0 2px #000,0 0 34px var(--halo),0 0 70px #ffd27a66;animation:throb 1.1s ease-in-out infinite}
+@keyframes throb{50%{border-color:var(--halo)}}
+.belt{flex:1;max-width:520px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.xp{position:relative;height:9px;background:#000c;border:1px solid #4a3a2c}
+.xp i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#6bd6ff,#e9fbff);box-shadow:0 0 10px #8fe0ff}
+.xp span{position:absolute;right:0;top:-18px;font-family:var(--f-mono);font-size:11px;color:var(--ash)}
+.skills{display:flex;gap:8px;justify-content:center}
+.skill{pointer-events:auto;position:relative;width:56px;height:56px;border:2px solid var(--bronze);background:linear-gradient(#24191a,#0c0809);color:var(--bone);border-radius:5px;display:grid;place-items:center;cursor:pointer;padding:0;box-shadow:0 0 0 1px #000,inset 0 0 12px #000}
+.skill svg{width:30px;height:30px;position:relative;z-index:0}
+.skill .cd{position:absolute;inset:0;border-radius:3px;background:conic-gradient(#000000c8 calc(var(--p,0) * 1turn),transparent 0);z-index:1}
+.skill .key{position:absolute;bottom:1px;right:3px;font-size:9px;font-family:var(--f-mono);color:var(--ash);z-index:2}
+.skill.gap{margin-left:8px}
+#skAsc.ready{border-color:var(--halo);box-shadow:0 0 0 1px #000,0 0 18px var(--halo)}
+#skBag.new::after{content:'';position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:var(--halo);box-shadow:0 0 8px var(--halo);z-index:3}
+#banner{position:fixed;left:0;right:0;top:24%;text-align:center;pointer-events:none;z-index:3;opacity:0;padding-inline:16px}
+#banner b{display:block;font-family:var(--f-display);font-weight:400;font-size:clamp(40px,8vw,74px);line-height:1;text-shadow:0 0 26px #ff5a2e99,0 2px 0 #000;text-wrap:balance}
+#banner span{display:block;margin-top:6px;font-size:15px;letter-spacing:.24em;text-transform:uppercase;color:var(--halo)}
+#banner.show{animation:ban 2.4s ease forwards}
+@keyframes ban{0%{opacity:0;transform:translateY(10px)}15%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0}}
+#tip{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));font-size:14px;letter-spacing:.1em;color:var(--halo);text-shadow:0 0 10px #000,0 0 4px #000;pointer-events:none;z-index:3;text-align:center;max-width:calc(100% - 32px)}
+
+#stick{position:fixed;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;border:2px solid #ffd27a55;background:#0006;pointer-events:none;z-index:4}
+#knob{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#ffe9b0,#a0702a);box-shadow:0 0 14px #ffd27a88}
+
+.overlay{position:fixed;inset:0;display:grid;place-items:center;padding:calc(24px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px));background:radial-gradient(ellipse at center,#0d080acc,#050304f4);overflow-y:auto;z-index:10;user-select:none}
+.panel{max-width:700px;width:100%;text-align:center}
+.eyebrow{font-size:13px;letter-spacing:.3em;text-transform:uppercase;color:var(--ember)}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(54px,12vw,112px);line-height:.86;margin:8px 0 0;text-wrap:balance;text-shadow:0 0 40px #ff5a2e55}
+h1 .h{color:var(--halo);text-shadow:0 0 40px #ffd27a77}
+h2{font-family:var(--f-display);font-weight:400;font-size:clamp(40px,8vw,68px);line-height:1;margin:6px 0 4px;text-wrap:balance}
+.tag{font-size:18px;color:var(--ash);margin:14px auto 22px;max-width:46ch;line-height:1.4}
+.classes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 20px;text-align:left}
+.cls{font:inherit;color:var(--bone);text-align:left;cursor:pointer;background:linear-gradient(#1c1314,#0b0708);border:1px solid #4a3a2c;padding:14px 14px 12px;display:flex;flex-direction:column;gap:6px;min-width:0;box-shadow:0 0 0 1px #000;--c:var(--halo)}
+.cls:hover,.cls:focus-visible{outline:none;border-color:var(--c);box-shadow:0 0 0 1px var(--c),0 0 26px color-mix(in srgb,var(--c) 35%,transparent)}
+.cls .role{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--c);display:flex;justify-content:space-between;gap:8px}
+.cls h3{font-family:var(--f-display);font-weight:400;font-size:36px;line-height:.95;margin:0;color:var(--c)}
+.cls p{margin:0;font-size:14px;line-height:1.35;color:var(--ash)}
+.cls ul{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:2px;font-size:13px}
+.cls ul b{color:var(--bone);font-weight:500}
+.cls .prog{font-family:var(--f-mono);font-size:11px;color:var(--ash);border-top:1px solid #2e231c;padding-top:6px;margin-top:2px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.cls .go{margin-top:auto;padding-top:8px;font-family:var(--f-display);font-size:20px;color:var(--c)}
+.controls{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;text-align:left;max-width:480px;margin:0 auto 6px;align-items:center;font-size:15px}
+.controls dt{text-align:right;white-space:nowrap}
+.controls dd{margin:0;color:var(--ash)}
+.controls dd b{color:var(--bone);font-weight:500}
+kbd{font-family:var(--f-mono);font-size:12px;border:1px solid #4a3a2c;border-bottom-width:3px;padding:1px 7px;border-radius:4px;background:#1a1314;color:var(--bone)}
+.touchonly{display:none}
+body.touch dl.touchonly{display:grid}
+body.touch p.touchonly,body.touch span.touchonly{display:block}
+body.touch .deskonly{display:none}
+.btn{font-family:var(--f-display);font-size:30px;padding:8px 40px 10px;background:linear-gradient(#45160f,#1a0807);color:var(--halo);border:2px solid var(--bronze);cursor:pointer;letter-spacing:.03em;box-shadow:0 0 0 2px #000}
+.btn.alt{background:#151011;color:var(--ash);border-color:#4a3a2c}
+.btn.sm{font-size:22px;padding:5px 22px 7px}
+.btn:hover,.btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--halo),0 0 34px #ff5a2e88}
+.btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.best{margin-top:14px;font-family:var(--f-mono);font-size:12px;color:var(--ash)}
+.linkish{font:inherit;font-size:14px;letter-spacing:.06em;background:none;border:0;border-bottom:1px dotted var(--ash);color:var(--ash);cursor:pointer;padding:2px 0}
+.linkish:hover,.linkish:focus-visible{color:var(--bone);outline:none}
+.saveline{display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:16px;font-size:13px;color:var(--ash)}
+.saveline .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ash);margin-right:6px;vertical-align:1px}
+.saveline .dot.cloud{background:var(--up);box-shadow:0 0 6px var(--up)}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}
+.card{text-align:left;background:linear-gradient(#1c1314,#0b0708);border:1px solid #4a3a2c;padding:16px 16px 14px;cursor:pointer;color:var(--bone);font:inherit;display:flex;flex-direction:column;gap:7px;min-width:0;box-shadow:0 0 0 1px #000}
+.card:hover,.card:focus-visible{outline:none;border-color:var(--c);box-shadow:0 0 0 1px var(--c),0 0 26px color-mix(in srgb,var(--c) 40%,transparent)}
+.card .tier{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--c);display:flex;justify-content:space-between}
+.card .tier kbd{font-size:10px}
+.card h3{font-family:var(--f-display);font-weight:400;font-size:27px;margin:0;line-height:1;color:var(--c)}
+.card p{margin:0;color:var(--bone);opacity:.82;font-size:15px;line-height:1.35}
+.card .src{font-size:12px;color:var(--ash);font-style:italic}
+.card .rank{font-family:var(--f-mono);font-size:11px;color:var(--ash);margin-top:auto}
+.card[data-tier=magic]{--c:var(--magic)} .card[data-tier=rare]{--c:var(--rare)} .card[data-tier=legend]{--c:var(--legend)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:480px;margin:22px auto 28px}
+.stats div{border-top:1px solid #4a3a2c;padding-top:8px}
+.stats b{display:block;font-family:var(--f-mono);font-size:22px;font-variant-numeric:tabular-nums}
+.stats b.soul{color:var(--soul)}
+.stats span{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ash)}
+
+/* ---------- reliquary / sanctuary ---------- */
+#invScr{place-items:start center}
+#invScr.hub{background:linear-gradient(90deg,transparent 0 22%,#050304cc 36%,#050304f2 52%);place-items:start end}
+.inv{box-sizing:border-box;width:100%;max-width:1040px;background:linear-gradient(#150e0f,#0a0708);border:1px solid #4a3a2c;box-shadow:0 0 0 1px #000,0 30px 80px #000;padding:18px;text-align:left}
+#invScr.hub .inv{max-width:min(940px,64vw)}
+.inv header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 18px;border-bottom:1px solid #3a2c22;padding-bottom:12px;margin-bottom:12px;flex-wrap:wrap}
+.inv h2{font-size:clamp(30px,5vw,44px);margin:2px 0 0}
+.who .sub{font-family:var(--f-mono);font-size:12px;color:var(--ash);margin-top:4px;display:flex;gap:14px;flex-wrap:wrap}
+.who .sub b{color:var(--soul);font-weight:600}
+.rankbar{width:180px;height:5px;background:#000;border:1px solid #3a2c22;display:inline-block;vertical-align:middle;margin-left:6px}
+.rankbar i{display:block;height:100%;background:linear-gradient(90deg,#8a6a43,var(--halo))}
+.launch{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.gates{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+.gates .lbl{margin-right:4px}
+.gate{font-family:var(--f-display);font-size:19px;min-width:46px;padding:2px 10px 4px;background:#151011;color:var(--ash);border:1px solid #4a3a2c;cursor:pointer}
+.gate[aria-pressed=true]{color:var(--halo);border-color:var(--bronze);background:linear-gradient(#3a1410,#1a0807);box-shadow:0 0 12px #ff5a2e44}
+.gate:focus-visible{outline:2px solid var(--halo);outline-offset:1px}
+.tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid #2e231c;flex-wrap:wrap}
+.tab{font:inherit;font-size:15px;letter-spacing:.14em;text-transform:uppercase;background:none;border:0;border-bottom:2px solid transparent;color:var(--ash);padding:6px 12px 8px;cursor:pointer;margin-bottom:-1px}
+.tab[aria-selected=true]{color:var(--halo);border-bottom-color:var(--halo)}
+.tab:focus-visible{outline:2px solid var(--halo);outline-offset:-2px}
+.tab .n{font-family:var(--f-mono);font-size:11px;color:var(--soul);margin-left:6px;letter-spacing:0}
+.x{font:inherit;font-size:14px;background:#1a1213;color:var(--bone);border:1px solid #4a3a2c;padding:6px 12px;cursor:pointer}
+.x:focus-visible,.act:focus-visible,.tile:focus-visible{outline:2px solid var(--halo);outline-offset:1px}
+.inv-body{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,310px);gap:18px;align-items:start}
+.sec-h{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ash);margin-bottom:8px;gap:8px}
+.doll{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(4,64px);gap:8px;grid-template-areas:". helm amulet" "weapon chest ring" "weapon chest gloves" ". boots ."}
+.tile{position:relative;border:1px solid #3d2f24;background:radial-gradient(circle at 50% 40%,#211718,#0c0809);display:grid;place-items:center;cursor:pointer;padding:0;color:var(--rc,#5a4c44);font:inherit;min-width:0}
+.tile svg{width:56%;height:56%;max-width:34px;max-height:34px}
+.tile.filled{border-color:color-mix(in srgb,var(--rc) 55%,#3d2f24);box-shadow:inset 0 0 14px color-mix(in srgb,var(--rc) 22%,transparent)}
+.tile.empty{cursor:default}
+.tile.sel{outline:2px solid var(--halo);outline-offset:1px}
+.tile.foreign::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(135deg,#00000000 0 6px,#ff6b6b18 6px 8px)}
+.tile .slbl{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#6b5d54}
+.tile.new::after{content:'';position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--halo);box-shadow:0 0 6px var(--halo)}
+.bag{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.bag .tile{aspect-ratio:1}
+.stashwrap{margin-top:16px}
+.stash{grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
+.hint{font-size:12px;color:var(--ash);margin-top:10px;line-height:1.4}
+.detail{border:1px solid #3a2c22;background:#0d0909;padding:14px;min-height:300px}
+.it-name{font-family:var(--f-display);font-size:28px;line-height:1;color:var(--rc)}
+.it-sub{font-size:12px;color:var(--ash);letter-spacing:.06em;margin:4px 0 10px}
+.it-mods{list-style:none;padding:0;margin:0 0 10px;display:grid;gap:3px;font-size:15px}
+.it-mods li{color:var(--magic)}
+.it-mods li.imp{color:var(--bone);border-bottom:1px solid #2a201a;padding-bottom:5px;margin-bottom:3px}
+.it-power{color:var(--legend);font-size:15px;margin:0 0 6px;line-height:1.35}
+.it-power i{display:block;font-size:12px;color:var(--ash);margin-top:2px}
+.it-warn{color:var(--down);font-size:13px;margin:0 0 6px}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.act{font:inherit;font-size:15px;padding:6px 14px;background:linear-gradient(#3a1410,#1a0807);color:var(--halo);border:1px solid var(--bronze);cursor:pointer}
+.act.alt{background:#151011;color:var(--ash);border-color:#4a3a2c}
+.act.soul{color:var(--soul);border-color:#3f6a7a;background:linear-gradient(#10232a,#081114)}
+.act:disabled{opacity:.4;cursor:not-allowed}
+.sheet h4{font-family:var(--f-display);font-weight:400;font-size:26px;margin:0 0 10px}
+.sheet dl{display:grid;grid-template-columns:1fr auto;gap:5px 12px;margin:0;font-size:14px}
+.sheet dt{color:var(--ash)} .sheet dd{margin:0;font-family:var(--f-mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.sheet .powers{margin-top:12px;display:grid;gap:6px}
+.sheet dt.main,.sheet dt.main+dd{color:var(--bone);font-weight:500}
+.sheet dd.up{color:var(--up)} .sheet dd.down{color:var(--down)}
+.sheet dt.up{color:#a8e8b0} .sheet dt.down{color:#ffa0a0}
+.sheet dd s{color:#6f635b;text-decoration-thickness:1px;margin-right:4px}
+
+/* skills + companions */
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pcard{position:relative;background:linear-gradient(#1a1213,#0b0708);border:1px solid #3d2f24;padding:14px 14px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.pcard.on{border-color:var(--bronze);box-shadow:0 0 0 1px #000,0 0 22px #ff9a3d22}
+.pcard.locked{opacity:.86}
+.pcard .head{display:flex;gap:12px;align-items:center}
+.pcard .ic{flex:none;width:46px;height:46px;border:1px solid #4a3a2c;display:grid;place-items:center;background:#0c0809}
+.pcard .ic svg{width:30px;height:30px}
+.pcard h3{font-family:var(--f-display);font-weight:400;font-size:26px;line-height:1;margin:0;color:var(--halo)}
+.pcard.locked h3{color:var(--ash)}
+.pcard .src{font-size:12px;color:var(--ash);font-style:italic}
+.pcard p{margin:0;font-size:15px;line-height:1.35;color:var(--bone);opacity:.85}
+.pcard .meta{font-family:var(--f-mono);font-size:11px;color:var(--ash);display:flex;gap:12px;flex-wrap:wrap}
+.pcard .badges{position:absolute;top:10px;right:10px;display:flex;gap:4px}
+.badge{font-family:var(--f-mono);font-size:11px;padding:1px 6px;border:1px solid var(--bronze);color:var(--halo);background:#1a0f0a}
+.pips{display:flex;gap:3px}
+.pips i{width:12px;height:5px;background:#2a201a}
+.pips i.on{background:var(--halo);box-shadow:0 0 6px #ffd27a88}
+.costline{font-family:var(--f-mono);font-size:12px;color:var(--soul)}
+
+#tt{position:fixed;left:0;top:0;z-index:30;display:flex;gap:8px;align-items:flex-start;pointer-events:none;max-width:calc(100vw - 24px)}
+.tt-col{width:290px;max-width:calc(50vw - 20px);background:#090607f5;border:1px solid #4a3a2c;box-shadow:0 0 0 1px #000,0 18px 40px #000e;padding:12px 14px}
+.tt-worn{border-style:dashed;background:#0d0909}
+.tt-card{border-top:2px solid var(--rc);margin:-12px -14px 0;padding:10px 14px 0;background:linear-gradient(color-mix(in srgb,var(--rc) 10%,transparent),transparent 60px)}
+.tt-eb{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ash);margin-bottom:4px}
+.tt-card .it-name{font-size:25px}
+.tt-ilvl{font-family:var(--f-mono);font-size:11px;color:#6f635b;margin:2px 0 4px}
+.tt-diff{border-top:1px solid #2e231c;margin-top:8px;padding-top:8px;display:grid;gap:3px}
+.tt-h{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ash);margin-bottom:2px}
+.tt-row{display:grid;grid-template-columns:14px auto 1fr;gap:6px;align-items:baseline;font-size:14px}
+.tt-row .v{font-family:var(--f-mono);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tt-row .n{color:var(--bone);opacity:.85}
+.tt-row.main .n{opacity:1;font-weight:500}
+.tt-row.up{color:var(--up)} .tt-row.down{color:var(--down)}
+.tt-row .arw{font-size:10px}
+.tt-same{font-size:13px;color:var(--ash)}
+.tt-keys{margin-top:8px;font-size:11px;color:#6f635b}
+.tt-keys kbd{font-size:10px;padding:0 5px}
+.sel-card{border:1px solid #3a2c22;padding:12px 14px;margin:-2px 0 14px;background:#120c0d}
+.sel-card .tt-card{margin:-12px -14px 0}
+
+/* save record */
+.record{max-width:560px;text-align:left}
+.record h2{text-align:center}
+.record p{color:var(--ash);font-size:15px;line-height:1.45;margin:8px 0}
+.record textarea{width:100%;box-sizing:border-box;min-height:96px;resize:vertical;background:#0a0708;color:var(--bone);border:1px solid #4a3a2c;padding:10px;font-family:var(--f-mono);font-size:11px;word-break:break-all;user-select:text;-webkit-user-select:text}
+.record textarea:focus{outline:2px solid var(--halo);outline-offset:1px}
+.record .row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px}
+.record .msg{font-size:14px;min-height:20px;color:var(--halo)}
+.record .danger{color:var(--down);border-color:#6a2a2a}
+
+@media (max-width:640px){#tt{display:none}}
+@media (max-width:980px){.inv-body{grid-template-columns:1fr}.doll{justify-content:center}#invScr.hub{background:#050304ee;place-items:start center}#invScr.hub .inv{max-width:100%}}
+@media (max-width:860px){.classes{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.launch{align-items:stretch}.gates{justify-content:flex-start}.stash{grid-template-columns:repeat(8,minmax(0,1fr))}}
+@media (max-width:640px){
+  .cards{grid-template-columns:1fr}
+  .globe{width:78px;height:78px}
+  .globe em{display:none}
+  .skill{width:46px;height:46px}
+  .skill svg{width:24px;height:24px}
+  .skills{gap:5px}
+  .skill.gap{margin-left:2px}
+  .wave b{font-size:28px}
+  .score b{font-size:19px}
+  #bossName{font-size:18px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stash{grid-template-columns:repeat(6,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:reduce){.globe.ready,.globe .fill::before,.globe .fill::after{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="vignette"></div>
+<div id="ascGlow"></div>
+<div id="hurt"></div>
+<div id="labels"></div>
+<div id="dmg"></div>
+<div id="toasts"></div>
+
+<div id="hud" hidden>
+  <div class="top">
+    <div class="wave"><span class="lbl">Circle</span><b id="waveN">I</b><small id="waveSub">0 remain</small></div>
+    <div id="bossBar" hidden><div id="bossName"></div><div class="bar"><i id="bossFill"></i></div><div id="bossPhase"></div></div>
+    <div class="score"><span class="lbl">Souls this descent</span><b id="score">0</b><small id="lvlTxt">Level 1</small></div>
+  </div>
+  <div class="bottom">
+    <div class="globe hp"><div class="fill" id="hpFill"></div><div class="glass"></div><span id="hpTxt">100</span><em>Life</em></div>
+    <div class="belt">
+      <div class="xp"><i id="xpFill"></i><span id="xpTxt">0 / 10</span></div>
+      <div class="skills">
+        <button class="skill" id="skDash" tabindex="-1" aria-label="Dash"><svg viewBox="0 0 32 32" fill="none" stroke="#ffd27a" stroke-width="2.4" stroke-linejoin="round"><path d="M5 8l8 8-8 8M14 8l8 8-8 8"/><path d="M24 9l5 7-5 7" stroke="#fff" stroke-width="2"/></svg><i class="cd"></i><span class="key deskonly">Space</span></button>
+        <button class="skill" id="skQ" tabindex="-1" aria-label="First skill"><span id="skQIcon"></span><i class="cd"></i><span class="key deskonly">Q</span></button>
+        <button class="skill" id="skR" tabindex="-1" aria-label="Second skill"><span id="skRIcon"></span><i class="cd"></i><span class="key deskonly">R</span></button>
+        <button class="skill" id="skAsc" tabindex="-1" aria-label="Ascend"><svg viewBox="0 0 32 32" fill="none" stroke="#ffd27a" stroke-width="2"><ellipse cx="16" cy="7" rx="7" ry="2.6"/><path d="M16 12c-5 2-10 2-13 0 2 5 6 8 13 9 7-1 11-4 13-9-3 2-8 2-13 0z" fill="#ffd27a33"/><path d="M16 21v9"/></svg><i class="cd"></i><span class="key deskonly">E</span></button>
+        <button class="skill gap" id="skBag" tabindex="-1" aria-label="Reliquary"><svg viewBox="0 0 32 32" fill="none" stroke="#e9dfcf" stroke-width="2"><path d="M8 11h16l-2 17H10z"/><path d="M12 11V8a4 4 0 0 1 8 0v3"/><path d="M13 18h6" stroke="#ffd27a"/></svg><span class="key deskonly">I</span></button>
+      </div>
+    </div>
+    <div class="globe grace" id="graceGlobe"><div class="fill" id="graceFill"></div><div class="glass"></div><span id="graceTxt">0</span><em>Grace</em></div>
+  </div>
+</div>
+<div id="banner"><b id="banTitle"></b><span id="banSub"></span></div>
+<div id="tip" hidden></div>
+<div id="stick" hidden><div id="knob"></div></div>
+
+<div class="overlay" id="titleScr">
+  <div class="panel" style="max-width:960px">
+    <div class="eyebrow">The Watchers have fallen · descend</div>
+    <h1>Brimstone <span class="h">Halo</span></h1>
+    <p class="tag">Choose your rank in the heavenly hierarchy. Your relics, companions and souls stay with you from one descent to the next.</p>
+    <div class="classes" id="classes"></div>
+    <dl class="controls deskonly">
+      <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move. Hold <kbd>Shift</kbd> to <b>focus</b> and show the white heart that can be struck</dd>
+      <dt>Mouse</dt><dd>Aim. Attacks fire on their own (<kbd>F</kbd> toggles). Wheel zooms</dd>
+      <dt><kbd>Space</kbd> <kbd>Q</kbd> <kbd>R</kbd></dt><dd><b>Dash</b> and your two <b>choir skills</b> (right click casts Q)</dd>
+      <dt><kbd>E</kbd> · <kbd>I</kbd></dt><dd><b>Ascend</b> when grace is full · open the <b>reliquary</b></dd>
+    </dl>
+    <dl class="controls touchonly">
+      <dt>Left thumb</dt><dd>Drag anywhere to <b>move</b>. Attacks seek the nearest foe</dd>
+      <dt>Belt</dt><dd><b>Dash</b>, two choir skills, <b>Ascend</b> and the <b>reliquary</b></dd>
+    </dl>
+    <div class="saveline"><span><i class="dot" id="syncDot"></i><span id="syncTxt">Progress is saved on this device</span></span><span id="soulBank"></span><button class="linkish" id="recordBtn">Save code and reset</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="levelScr" hidden>
+  <div class="panel" style="max-width:880px">
+    <div class="eyebrow" style="color:var(--halo)">A relic answers your prayer</div>
+    <h2 id="levelH">Level 2</h2>
+    <div class="cards" id="cards"></div>
+  </div>
+</div>
+
+<div class="overlay" id="invScr" hidden>
+  <div class="inv">
+    <header>
+      <div class="who">
+        <div class="eyebrow" style="color:var(--halo)" id="invEyebrow">Reliquary</div>
+        <h2 id="invTitle">Seraph</h2>
+        <div class="sub"><span id="invRank"></span><span>Souls held <b id="invSouls">0</b></span></div>
+      </div>
+      <div class="launch" id="hubLaunch">
+        <div class="gates" id="gates"></div>
+        <div class="btns" style="justify-content:flex-end"><button class="btn alt sm" id="hubBack">Another choir</button><button class="btn sm" id="hubGo">Descend</button></div>
+      </div>
+      <button class="x" id="invClose">Close <kbd class="deskonly" style="display:inline">I</kbd></button>
+    </header>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tabBtnGear" data-tab="gear" aria-selected="true">Relics</button>
+      <button class="tab" role="tab" id="tabBtnSkills" data-tab="skills" aria-selected="false">Choir skills</button>
+      <button class="tab" role="tab" id="tabBtnPet" data-tab="pet" aria-selected="false">Companion</button>
+    </div>
+    <div id="tabGear">
+      <div class="inv-body">
+        <section><div class="sec-h"><span>Worn</span></div><div class="doll" id="doll"></div></section>
+        <section><div class="sec-h"><span>Bag</span><span id="bagCount">0 / 30</span></div><div class="bag" id="bag"></div>
+          <div class="stashwrap" id="stashWrap"><div class="sec-h"><span>Shared stash · every choir can reach it</span><span id="stashCount">0 / 50</span></div><div class="bag stash" id="stash"></div></div>
+          <p class="hint deskonly">Hover to compare. Click to select, double-click to equip. With an item selected, <kbd>E</kbd> equips, <kbd>T</kbd> moves it between bag and stash, <kbd>X</kbd> salvages it for souls.</p>
+          <p class="hint touchonly">Tap an item to compare it, then equip, move or salvage.</p></section>
+        <section class="detail" id="detail"></section>
+      </div>
+    </div>
+    <div id="tabSkills" hidden></div>
+    <div id="tabPet" hidden></div>
+  </div>
+</div>
+
+<div id="tt" hidden></div>
+
+<div class="overlay" id="pauseScr" hidden>
+  <div class="panel">
+    <div class="eyebrow">The fire waits</div>
+    <h2>Paused</h2>
+    <p class="tag">Press <kbd>P</kbd> or <kbd>Esc</kbd> to return. <kbd>M</kbd> mutes the choir. Everything you carry is already saved.</p>
+    <div class="btns"><button class="btn" id="resumeBtn">Return</button><button class="btn alt" id="leaveBtn">Back to the sanctuary</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="deadScr" hidden>
+  <div class="panel">
+    <div class="eyebrow" id="deadEyebrow">Your light goes out</div>
+    <h2 id="deadH">Fallen in Circle I</h2>
+    <div class="stats">
+      <div><b id="stSouls" class="soul">0</b><span>Souls earned</span></div>
+      <div><b id="stCircle">I</b><span>Deepest circle</span></div>
+      <div><b id="stKills">0</b><span>Slain</span></div>
+      <div><b id="stGraze">0</b><span>Grazes</span></div>
+      <div><b id="stLoot">0</b><span>Relics found</span></div>
+      <div><b id="stTime">0:00</b><span>Time</span></div>
+    </div>
+    <div class="btns"><button class="btn" id="againBtn">Descend again</button><button class="btn alt" id="hubBtn">Sanctuary</button></div>
+    <div class="best" id="deadNote"></div>
+  </div>
+</div>
+
+<div class="overlay" id="recordScr" hidden>
+  <div class="panel record">
+    <div class="eyebrow" style="color:var(--halo);text-align:center">Your record</div>
+    <h2>Save code</h2>
+    <p id="recordWhere"></p>
+    <p>Copy this code to move your progress to another browser, or paste one here to restore it.</p>
+    <textarea id="recordCode" spellcheck="false" aria-label="Save code"></textarea>
+    <div class="row"><button class="act" id="copyCode">Copy code</button><button class="act alt" id="loadCode">Load pasted code</button><span class="msg" id="recordMsg" role="status"></span></div>
+    <p>Erasing removes every relic, souls, skills and companions for all three choirs.</p>
+    <div class="row"><button class="act alt danger" id="eraseBtn">Erase all progress</button><button class="act" id="recordClose" style="margin-left:auto">Done</button></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/MaskPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/models.js"></script>
+<script src="js/game.js"></script>
+<script src="js/skills.js"></script>
+<script src="js/pets.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
